@@ -17,36 +17,6 @@
 
 #include <QSocketNotifier>
 
-static void randname(char *buf) {
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    long r = ts.tv_nsec;
-    for (int i = 0; i < 6; ++i) {
-        assert(buf[i] == 'X');
-        buf[i] = 'A'+(r&15)+(r&16)*2;
-        r >>= 5;
-    }
-}
-
-static int anonymous_shm_open(void) {
-    char name[] = "/xdpw-shm-XXXXXX";
-    int retries = 100;
-
-    do {
-        randname(name + strlen(name) - 6);
-
-        --retries;
-        // shm_open guarantees that O_CLOEXEC is set
-        int fd = shm_open(name, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
-        if (fd >= 0) {
-            shm_unlink(name);
-            return fd;
-        }
-    } while (retries > 0 && errno == EEXIST);
-
-    return -1;
-}
-
 static void on_core_error(void *data, uint32_t id, int seq, int res, const char* message) {
     qCFatal(SCREENCAST, "pipewire: fatal error event from core");
 }
@@ -122,32 +92,6 @@ ScreenCastContext::~ScreenCastContext()
     gbm_device_destroy(m_gbmDevice);
 }
 
-wl_buffer *ScreenCastContext::createWLSHMBuffer(int fd, wl_shm_format fmt, int width, int height, int stride)
-{
-    if (!m_shm) {
-        qCCritical(SCREENCAST) << "error, WLShm is nullptr";
-        return nullptr;
-    }
-
-    if (!m_shmInterfaceActive) {
-        qCCritical(SCREENCAST) << "error, WLShm is deactive";
-        return nullptr;
-    }
-
-    int size = stride * height;
-
-    if (fd < 0) {
-        qCCritical(SCREENCAST) << "error, fd < 0";
-        return nullptr;
-    }
-
-    struct wl_shm_pool *pool = m_shm->create_pool(fd, size);
-    struct wl_buffer *buffer = wl_shm_pool_create_buffer(pool, 0, width, height, stride, fmt);
-    wl_shm_pool_destroy(pool);
-
-    return buffer;
-}
-
 gbm_device *ScreenCastContext::createGBMDeviceFromDRMDevice(drmDevice *device)
 {
     if (!(device->available_nodes & (1 << DRM_NODE_RENDER))) {
@@ -167,7 +111,6 @@ gbm_device *ScreenCastContext::createGBMDeviceFromDRMDevice(drmDevice *device)
 
     return gbm_create_device(fd);
 }
-
 
 bool ScreenCastContext::queryDMABufModifiers(uint32_t drmFormat,
                                              uint32_t numModifiers,
@@ -217,6 +160,18 @@ bool ScreenCastContext::shmInterfaceActive() const
 bool ScreenCastContext::screenCopyManagerActive() const
 {
     return m_screenCopyManagerActive;
+}
+
+void ScreenCastContext::randname(char *buf)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    long r = ts.tv_nsec;
+    for (int i = 0; i < 6; ++i) {
+        assert(buf[i] == 'X');
+        buf[i] = 'A'+(r&15)+(r&16)*2;
+        r >>= 5;
+    }
 }
 
 void ScreenCastContext::handleLinuxDmaBufModifierChanged(uint32_t format,

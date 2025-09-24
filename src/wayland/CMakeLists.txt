@@ -70,6 +70,8 @@ add_library(xdg-desktop-portal-dde-wayland SHARED
     protocols/imagecopycapture.cpp
     protocols/imagecapturesource.h
     protocols/imagecapturesource.cpp
+    pipewiresource.h
+    pipewiresource.cpp
 )
 
 qt6_generate_wayland_protocol_client_sources(xdg-desktop-portal-dde-wayland FILES

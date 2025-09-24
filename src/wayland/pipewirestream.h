@@ -36,23 +36,6 @@ public:
         XDPW_FRAME_STATE_SUCCESS,
     };
 
-    struct PipeWireSourceBuffer {
-        enum PortalCommon::BufferType bufferType;
-
-        uint32_t width;
-        uint32_t height;
-        uint32_t format;
-        int planeCount;
-
-        int fd[4];
-        uint32_t size[4];
-        uint32_t stride[4];
-        uint32_t offset[4];
-
-        struct gbm_bo *bo = nullptr;
-        struct wl_buffer *buffer = nullptr;
-    };
-
     struct PipeWireFrame {
         bool y_invert;
         uint64_t tv_sec;
@@ -60,7 +43,7 @@ public:
         uint32_t transformation;
         QRect damage[4];
         uint32_t damage_count;
-        struct PipeWireSourceBuffer *pipeWireSourceBuffer = nullptr;
+        struct PipeWireSource *pipeWireSource = nullptr;
         struct pw_buffer *pwBuffer = nullptr;
     };
 
@@ -74,9 +57,6 @@ public:
                    QObject *parent = nullptr);
     ~PipeWireStream() override;
 
-    PipeWireSourceBuffer *createPipeWireSourceBuffer(enum PortalCommon::BufferType bufferType,
-                                                     ScreenCopyFrameInfo *frameInfo);
-    void destroyPipeWireSourceBuffer(PipeWireSourceBuffer *buffer);
     uint32_t nodeId() const { return m_nodeId; }
     void enqueueBuffer();
     void dequeueBuffer();

@@ -22,6 +22,7 @@
 class WLShm;
 class PipeWireCore;
 class PipeWireStream;
+struct PipeWireSource;
 
 struct DMABufFeedbackData {
     void *formatTableData;
@@ -41,11 +42,6 @@ public:
     ScreenCastContext(QObject *parent = nullptr);
     ~ScreenCastContext() override;
 
-    wl_buffer *createWLSHMBuffer(int fd,
-                                 enum wl_shm_format fmt,
-                                 int width,
-                                 int height,
-                                 int stride);
     bool queryDMABufModifiers(uint32_t drmFormat,
                                     uint32_t numModifiers,
                                     uint64_t *modifiers,
@@ -53,6 +49,7 @@ public:
     bool linuxDmaBufInterfaceActive() const;
     bool shmInterfaceActive() const;
     bool screenCopyManagerActive() const;
+    static void randname(char *buf);
 private Q_SLOTS:
     void handleLinuxDmaBufModifierChanged(uint32_t format,
                                           uint32_t modifierHigh,
@@ -71,6 +68,7 @@ private:
 
 private:
     friend class PipeWireStream;
+    friend class PipeWireSource;
 
     PipeWireCore *m_pwCore;
     ScreenCopyManager *m_screenCopyManager;

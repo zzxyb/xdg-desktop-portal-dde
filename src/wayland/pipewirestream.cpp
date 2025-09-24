@@ -8,13 +8,7 @@
 #include "pipewirecore.h"
 #include "pipewiretimer.h"
 #include "pipewireutils.h"
-
-#include <drm_fourcc.h>
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <sys/param.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
+#include "pipewiresource.h"
 
 #include <pipewire/pipewire.h>
 #include <spa/buffer/meta.h>
@@ -39,36 +33,6 @@
 #define XDP_CAST_PROTO_VER 4
 
 #define FPS_MEASURE_PERIOD_SEC 5.0
-
-static void randname(char *buf) {
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    long r = ts.tv_nsec;
-    for (int i = 0; i < 6; ++i) {
-        assert(buf[i] == 'X');
-        buf[i] = 'A'+(r&15)+(r&16)*2;
-        r >>= 5;
-    }
-}
-
-static int anonymous_shm_open(void) {
-    char name[] = "/xdpw-shm-XXXXXX";
-    int retries = 100;
-
-    do {
-        randname(name + strlen(name) - 6);
-
-        --retries;
-        // shm_open guarantees that O_CLOEXEC is set
-        int fd = shm_open(name, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
-        if (fd >= 0) {
-            shm_unlink(name);
-            return fd;
-        }
-    } while (retries > 0 && errno == EEXIST);
-
-    return -1;
-}
 
 static struct spa_pod *fixate_format(struct spa_pod_builder *b, enum spa_video_format format,
                                      uint32_t width, uint32_t height, uint32_t framerate, uint64_t *modifier)
@@ -252,19 +216,6 @@ PipeWireStream::~PipeWireStream()
     destroyStream();
 }
 
-void PipeWireStream::destroyPipeWireSourceBuffer(PipeWireSourceBuffer *buffer)
-{
-    wl_buffer_destroy(buffer->buffer);
-    if (buffer->bufferType == PortalCommon::DMABUF) {
-        gbm_bo_destroy(buffer->bo);
-    }
-    for (int plane = 0; plane < buffer->planeCount; plane++) {
-        close(buffer->fd[plane]);
-    }
-
-    delete buffer;
-}
-
 void PipeWireStream::updateStreamParam()
 {
     qCDebug(SCREENCAST, "pipewire: stream update parameters");
@@ -291,7 +242,7 @@ void PipeWireStream::createStream()
     const struct spa_pod *params[2];
 
     char name[] = "xdpw-stream-XXXXXX";
-    randname(name + strlen(name) - 6);
+    ScreenCastContext::randname(name + strlen(name) - 6);
     m_stream = pw_stream_new(m_context->m_pwCore->m_pwCore, name,
                            pw_properties_new(
                                    PW_KEY_MEDIA_CLASS, "Video/Source",
@@ -498,15 +449,15 @@ void PipeWireStream::onStreamParamChanged(uint32_t id, const spa_pod *param)
 
 void PipeWireStream::onStreamRemoveBuffer(pw_buffer *buffer)
 {
-    PipeWireStream::PipeWireSourceBuffer *PipeWireSourceBuffer =
-            static_cast<PipeWireStream::PipeWireSourceBuffer *>(buffer->user_data);
-    if (PipeWireSourceBuffer) {
-        destroyPipeWireSourceBuffer(PipeWireSourceBuffer);
+    PipeWireSource *pipeWireSource =
+            static_cast<PipeWireSource *>(buffer->user_data);
+    if (pipeWireSource) {
+        delete pipeWireSource;
     }
 
     if (m_currentFrame.pwBuffer == buffer) {
         m_currentFrame.pwBuffer = nullptr;
-        m_currentFrame.pipeWireSourceBuffer = nullptr;
+        m_currentFrame.pipeWireSource = nullptr;
     }
 
     for (uint32_t plane = 0; plane < buffer->buffer->n_datas; plane++) {
@@ -536,27 +487,30 @@ void PipeWireStream::onStreamAddBuffer(pw_buffer *buffer)
 
     qCDebug(SCREENCAST, "pipewire: selected buffertype %u", t);
 
-    PipeWireStream::PipeWireSourceBuffer *PipeWireSourceBuffer = createPipeWireSourceBuffer(m_bufferType, &m_screencopyFrameInfo[m_bufferType]);
-    if (!PipeWireSourceBuffer) {
+    PipeWireSource *pipeWireSource = new PipeWireSource(m_bufferType,
+                                                        &m_screencopyFrameInfo[m_bufferType],
+                                                        m_context,
+                                                        m_pipewireVideoInfo.modifier);
+    if (!pipeWireSource || !pipeWireSource->buffer) {
         qCCritical(SCREENCAST, "pipewire: failed to create xdpw buffer");
         m_err = 1;
         return;
     }
-    buffer->user_data = PipeWireSourceBuffer;
+    buffer->user_data = pipeWireSource;
 
-    assert(PipeWireSourceBuffer->planeCount >= 0 &&
-           buffer->buffer->n_datas == (uint32_t)PipeWireSourceBuffer->planeCount);
+    assert(pipeWireSource->planeCount >= 0 &&
+           buffer->buffer->n_datas == (uint32_t)pipeWireSource->planeCount);
     for (uint32_t plane = 0; plane < buffer->buffer->n_datas; plane++) {
         d[plane].type = t;
-        d[plane].maxsize = PipeWireSourceBuffer->size[plane];
+        d[plane].maxsize = pipeWireSource->size[plane];
         d[plane].mapoffset = 0;
-        d[plane].chunk->size = PipeWireSourceBuffer->size[plane];
-        d[plane].chunk->stride = PipeWireSourceBuffer->stride[plane];
-        d[plane].chunk->offset = PipeWireSourceBuffer->offset[plane];
+        d[plane].chunk->size = pipeWireSource->size[plane];
+        d[plane].chunk->stride = pipeWireSource->stride[plane];
+        d[plane].chunk->offset = pipeWireSource->offset[plane];
         d[plane].flags = 0;
-        d[plane].fd = PipeWireSourceBuffer->fd[plane];
+        d[plane].fd = pipeWireSource->fd[plane];
         d[plane].data = nullptr;
-        if (PipeWireSourceBuffer->bufferType == PortalCommon::DMABUF && d[plane].chunk->size == 0) {
+        if (pipeWireSource->bufferType == PortalCommon::DMABUF && d[plane].chunk->size == 0) {
             d[plane].chunk->size = 9;
         }
     }
@@ -678,14 +632,14 @@ void PipeWireStream::enqueueBuffer()
             qCDebug(SCREENCAST, "pipewire: offset %d", d[plane].chunk->offset);
             qCDebug(SCREENCAST, "pipewire: chunk flags %d", d[plane].chunk->flags);
         }
-        qCDebug(SCREENCAST, "pipewire: width %d", m_currentFrame.pipeWireSourceBuffer->width);
-        qCDebug(SCREENCAST, "pipewire: height %d", m_currentFrame.pipeWireSourceBuffer->height);
+        qCDebug(SCREENCAST, "pipewire: width %d", m_currentFrame.pipeWireSource->width);
+        qCDebug(SCREENCAST, "pipewire: height %d", m_currentFrame.pipeWireSource->height);
         qCDebug(SCREENCAST, "pipewire: y_invert %d", m_currentFrame.y_invert);
         qCDebug(SCREENCAST) << "pipewire: buffer type" << m_bufferType;
         int queueRet = pw_stream_queue_buffer(m_stream, pw_buf);
     }
 
-    m_currentFrame.pipeWireSourceBuffer = nullptr;
+    m_currentFrame.pipeWireSource = nullptr;
     m_currentFrame.pwBuffer = nullptr;
 }
 
@@ -698,7 +652,7 @@ void PipeWireStream::dequeueBuffer()
         return;
     }
 
-    m_currentFrame.pipeWireSourceBuffer = static_cast<PipeWireStream::PipeWireSourceBuffer *>(m_currentFrame.pwBuffer->user_data);
+    m_currentFrame.pipeWireSource = static_cast<PipeWireSource *>(m_currentFrame.pwBuffer->user_data);
 }
 
 bool PipeWireStream::buildModifierlist(uint32_t drmFormat, uint64_t **modifiers, uint32_t *modifierCount)
@@ -742,19 +696,19 @@ void PipeWireStream::handleFrameBufferDone()
         return;
     }
 
-    if (!m_currentFrame.pipeWireSourceBuffer) {
+    if (!m_currentFrame.pipeWireSource) {
         qCWarning(SCREENCAST, "no current buffer");
         screenCopyFrameFinish();
         return;
     }
 
-    assert(m_currentFrame.pipeWireSourceBuffer);
+    assert(m_currentFrame.pipeWireSource);
 
     if ((m_bufferType == PortalCommon::SHM &&
-         (m_currentFrame.pipeWireSourceBuffer->size[0] != m_screencopyFrameInfo[m_bufferType].size ||
-          m_currentFrame.pipeWireSourceBuffer->stride[0] != m_screencopyFrameInfo[m_bufferType].stride)) ||
-        m_currentFrame.pipeWireSourceBuffer->width != m_screencopyFrameInfo[m_bufferType].width ||
-        m_currentFrame.pipeWireSourceBuffer->height != m_screencopyFrameInfo[m_bufferType].height) {
+         (m_currentFrame.pipeWireSource->size[0] != m_screencopyFrameInfo[m_bufferType].size ||
+          m_currentFrame.pipeWireSource->stride[0] != m_screencopyFrameInfo[m_bufferType].stride)) ||
+        m_currentFrame.pipeWireSource->width != m_screencopyFrameInfo[m_bufferType].width ||
+        m_currentFrame.pipeWireSource->height != m_screencopyFrameInfo[m_bufferType].height) {
         qCWarning(SCREENCAST, "pipewire buffer has wrong dimensions");
         m_frameState = XDPW_FRAME_STATE_FAILED;
         screenCopyFrameFinish();
@@ -764,7 +718,7 @@ void PipeWireStream::handleFrameBufferDone()
     m_currentFrame.transformation = WL_OUTPUT_TRANSFORM_NORMAL;
 
     m_currentFrame.damage_count = 0;
-    m_frame->copy_with_damage(m_currentFrame.pipeWireSourceBuffer->buffer);
+    m_frame->copy_with_damage(m_currentFrame.pipeWireSource->buffer);
     qCDebug(SCREENCAST, "ScreenCopyFrame buffer done, frame copied");
 
     fps_limit_measure_start(&fps_limit, m_framerate);
@@ -978,144 +932,4 @@ int PipeWireStream::startScreencast()
     m_initialized = true;
 
     return 0;
-}
-
-PipeWireStream::PipeWireSourceBuffer *PipeWireStream::createPipeWireSourceBuffer(enum PortalCommon::BufferType bufferType, ScreenCopyFrameInfo *frameInfo)
-{
-    PipeWireSourceBuffer *buffer = new PipeWireSourceBuffer;
-    buffer->width = frameInfo->width;
-    buffer->height = frameInfo->height;
-    buffer->format = frameInfo->format;
-    buffer->bufferType = bufferType;
-
-    switch (bufferType) {
-    case PortalCommon::SHM:
-        buffer->planeCount = 1;
-        buffer->size[0] = frameInfo->size;
-        buffer->stride[0] = frameInfo->stride;
-        buffer->offset[0] = 0;
-        buffer->fd[0] = anonymous_shm_open();
-        if (buffer->fd[0] == -1) {
-            qCCritical(SCREENCAST, "xdpw: unable to create anonymous filedescriptor");
-            delete buffer;
-
-            return nullptr;
-        }
-
-        if (ftruncate(buffer->fd[0], buffer->size[0]) < 0) {
-            qCCritical(SCREENCAST, "unable to truncate filedescriptor");
-            close(buffer->fd[0]);
-            delete buffer;
-
-            return nullptr;
-        }
-
-        buffer->buffer = m_context->createWLSHMBuffer(buffer->fd[0],
-                                                      PipeWireutils::wlShmFormatFromDRMFormat(frameInfo->format),
-                                                      frameInfo->width,
-                                                      frameInfo->height,
-                                                      frameInfo->stride);
-        if (!buffer->buffer) {
-            qCCritical(SCREENCAST, "unable to create wl_buffer");
-            close(buffer->fd[0]);
-            delete buffer;
-
-            return nullptr;
-        }
-        break;
-    case PortalCommon::DMABUF:;
-        uint32_t flags = GBM_BO_USE_RENDERING;
-        if (m_pipewireVideoInfo.modifier != DRM_FORMAT_MOD_INVALID) {
-            uint64_t *modifiers = (uint64_t*)&m_pipewireVideoInfo.modifier;
-            buffer->bo = gbm_bo_create_with_modifiers2(m_context->m_gbmDevice,
-                                                       frameInfo->width,
-                                                       frameInfo->height,
-                                                       frameInfo->format,
-                                                       modifiers,
-                                                       1,
-                                                       flags);
-        } else {
-            if (m_context->m_forceModLinear) {
-                flags |= GBM_BO_USE_LINEAR;
-            }
-            buffer->bo = gbm_bo_create(m_context->m_gbmDevice,
-                                       frameInfo->width,
-                                       frameInfo->height,
-                                       frameInfo->format,
-                                       flags);
-        }
-
-        if (!buffer->bo&& m_pipewireVideoInfo.modifier == DRM_FORMAT_MOD_LINEAR) {
-            buffer->bo = gbm_bo_create(m_context->m_gbmDevice,
-                                       frameInfo->width,
-                                       frameInfo->height,
-                                       frameInfo->format,
-                                       flags | GBM_BO_USE_LINEAR);
-        }
-
-        if (!buffer->bo) {
-            qCCritical(SCREENCAST, "failed to create gbm_bo");
-            delete buffer;
-
-            return nullptr;
-        }
-        buffer->planeCount = gbm_bo_get_plane_count(buffer->bo);
-
-        struct zwp_linux_buffer_params_v1 *params = m_context->m_linuxDmaBuf->create_params();
-        if (!params) {
-            qCCritical(SCREENCAST, "failed to create linux_buffer_params");
-            gbm_bo_destroy(buffer->bo);
-            delete buffer;
-
-            return nullptr;
-        }
-
-        for (int plane = 0; plane < buffer->planeCount; plane++) {
-            buffer->size[plane] = 0;
-            buffer->stride[plane] = gbm_bo_get_stride_for_plane(buffer->bo, plane);
-            buffer->offset[plane] = gbm_bo_get_offset(buffer->bo, plane);
-            uint64_t mod = gbm_bo_get_modifier(buffer->bo);
-            buffer->fd[plane] = gbm_bo_get_fd_for_plane(buffer->bo, plane);
-
-            if (buffer->fd[plane] < 0) {
-                qCCritical(SCREENCAST, "failed to get file descriptor");
-                zwp_linux_buffer_params_v1_destroy(params);
-                gbm_bo_destroy(buffer->bo);
-                for (int plane_tmp = 0; plane_tmp < plane; plane_tmp++) {
-                    close(buffer->fd[plane_tmp]);
-                }
-
-                delete buffer;
-
-                return nullptr;
-            }
-
-            zwp_linux_buffer_params_v1_add(params,
-                                           buffer->fd[plane],
-                                           plane,
-                                           buffer->offset[plane],
-                                           buffer->stride[plane],
-                                           mod >> 32, mod & 0xffffffff);
-        }
-        buffer->buffer = zwp_linux_buffer_params_v1_create_immed(params,
-                                                                 buffer->width,
-                                                                 buffer->height,
-                                                                 buffer->format,
-                                                                 0);
-        zwp_linux_buffer_params_v1_destroy(params);
-
-        if (!buffer->buffer) {
-            qCCritical(SCREENCAST, "failed to create buffer");
-            gbm_bo_destroy(buffer->bo);
-            for (int plane = 0; plane < buffer->planeCount; plane++) {
-                close(buffer->fd[plane]);
-            }
-
-            delete buffer;
-
-            return nullptr;
-        }
-    }
-
-    return buffer;
 }

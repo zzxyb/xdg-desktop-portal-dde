@@ -6,6 +6,7 @@
 
 #include "portalcommon.h"
 #include "pipewirestream.h"
+#include "toplevelmodel.h"
 
 #include <QDBusArgument>
 
@@ -37,6 +38,7 @@ public:
 
     Stream startStreamingOutput(QScreen *screen, PortalCommon::CursorModes mode);
     Stream startStreamingRegion(const QRect &region, PortalCommon::CursorModes mode);
+    Stream startStreamingToplevel(ToplevelInfo *toplevel, PortalCommon::CursorModes mode);
 
     Stream startStreaming(PipeWireStream *stream, const QVariantMap &streamOptions);
     void stopStreaming(uint nodeId);

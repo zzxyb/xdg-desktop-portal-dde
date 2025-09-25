@@ -209,6 +209,11 @@ PipeWireStream::PipeWireStream(QPointer<ScreenCastContext> context, const QRect 
 {
 }
 
+PipeWireStream::PipeWireStream(QPointer<ScreenCastContext> context, ToplevelInfo *toplevel, PortalCommon::CursorModes mode, QObject *parent)
+{
+
+}
+
 PipeWireStream::~PipeWireStream()
 {
     qCDebug(SCREENCAST) << "~PipeWireStream";

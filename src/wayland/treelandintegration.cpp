@@ -83,7 +83,7 @@ Stream TreelandIntergration::startStreamingOutput(QScreen *screen, PortalCommon:
 {
     auto stream = new PipeWireStream(m_context, screen, mode, this);
     if (!stream) {
-        qCWarning(SCREENCAST) << "Cannot stream, output not found" << screen->name();
+        qCCritical(SCREENCAST) << "Cannot stream, output not found" << screen->name();
         // TODO：system notify
         return Stream{};
     }
@@ -98,13 +98,26 @@ Stream TreelandIntergration::startStreamingRegion(const QRect &region, PortalCom
 {
     auto stream = new PipeWireStream(m_context, region, mode, this);
     if (stream) {
-        qCWarning(SCREENCAST) << "Cannot stream for region" << region;
+        qCCritical(SCREENCAST) << "Cannot stream for region" << region;
         return Stream{};
     }
     return startStreaming(stream,
                           {
                                   {QLatin1String("size"), region.size()},
                                   {QLatin1String("source_type"), static_cast<uint>(PortalCommon::Monitor)}
+                          });
+}
+
+Stream TreelandIntergration::startStreamingToplevel(ToplevelInfo *toplevel, PortalCommon::CursorModes mode)
+{
+    auto stream = new PipeWireStream(m_context, toplevel, mode, this);
+    if (stream) {
+        qCCritical(SCREENCAST) << "Cannot stream for toplevel" << toplevel->appID;
+        return Stream{};
+    }
+    return startStreaming(stream,
+                          {
+                                  {QLatin1String("source_type"), static_cast<uint>(PortalCommon::Window)}
                           });
 }
 
@@ -151,6 +164,7 @@ Stream TreelandIntergration::startStreaming(PipeWireStream *stream, const QVaria
         loop.quit();
     });
     loop.exec();
+    qWarning() << "xyb--" << ret.nodeId;
     return ret;
 }
 

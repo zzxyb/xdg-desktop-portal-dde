@@ -11,6 +11,11 @@
 #include "restoredata.h"
 #include "screenlistmodel.h"
 
+struct ToplevelsRestoreInfo {
+    QString appId;
+    QString title;
+};
+
 ScreencastPortalWayland::ScreencastPortalWayland(PortalWaylandContext *context)
     : AbstractWaylandPortal(context)
 {
@@ -106,9 +111,11 @@ uint ScreencastPortalWayland::SelectSources(const QDBusObjectPath &handle,
 std::pair<PortalResponse::Response, QVariantMap> ScreencastPortalWayland::continueStartAfterDialog(ScreenCastSession *session,
                                                                                                    const QList<QPointer<QScreen>> &selectedOutputs,
                                                                                                    const QRect &selectedRegion,
+                                                                                                   const QList<ToplevelInfo *> selectedToplevel,
                                                                                                    bool allowRestore)
 {
     Streams streams;
+    // QList<ToplevelsRestoreInfo> toplevels;
     QPointer<ScreenCastSession> guardedSession(session);
     for (const auto &output : std::as_const(selectedOutputs)) {
         if (!QGuiApplication::screens().contains(output)) {
@@ -121,6 +128,19 @@ std::pair<PortalResponse::Response, QVariantMap> ScreencastPortalWayland::contin
             return {PortalResponse::OtherError, {}};
         }
         streams.append(outputStream);
+    }
+    for (const auto toplevel : std::as_const(selectedToplevel)) {
+        Stream toplevelStream = globalIntergration->startStreamingToplevel(toplevel, session->cursorMode());
+        if (!toplevelStream.isValid()) {
+            qCWarning(SCREENCAST) << "Invalid toplevel!" << toplevel->appID;
+            return {PortalResponse::OtherError, {}};
+        }
+
+        // TODO
+        // if (allowRestore) {
+        //     toplevels += ToplevelsRestoreInfo{.appId = toplevel->appID, .title = toplevel->windowTitle};
+        // }
+        streams << toplevelStream;
     }
     if (streams.isEmpty()) {
         qCWarning(SCREENCAST) << "Pipewire stream is not ready to be streamed";
@@ -146,6 +166,7 @@ std::pair<PortalResponse::Response, QVariantMap> ScreencastPortalWayland::contin
             QVariantMap restoreMap;
             restoreMap.insert(QStringLiteral("outputs"), outputNames);
             restoreMap.insert(QStringLiteral("region"), selectedRegion);
+            // restoreMap.insert(QStringLiteral("toplevels"), QVariant::fromValue(toplevels));
 
             const RestoreData restoreData(QStringLiteral("DDE"),
                                           RestoreData::currentRestoreDataVersion(),
@@ -223,7 +244,8 @@ void ScreencastPortalWayland::Start(const QDBusObjectPath &handle,
     }
 
     if (valid) {
-        std::tie(replyResponse, replyResults) = continueStartAfterDialog(session, selectedOutputs, selectedRegion, true);
+        // TODO: Toplevel ignore restore
+        std::tie(replyResponse, replyResults) = continueStartAfterDialog(session, selectedOutputs, selectedRegion, {}, true);
         return;
     }
 
@@ -239,10 +261,12 @@ void ScreencastPortalWayland::Start(const QDBusObjectPath &handle,
         }
         QList<QPointer<QScreen>> screens = screenCastDialog->selectedOutputs();
         QRect region = screenCastDialog->selectedRegion();
+        QList<ToplevelInfo *> toplevels = screenCastDialog->selectedToplevels();
         bool allowRestore = screenCastDialog->allowRestore();
         auto [response, results] = continueStartAfterDialog(session,
                                                             screens,
                                                             region,
+                                                            toplevels,
                                                             allowRestore);
         return {response, results};
     });

@@ -8,6 +8,7 @@
 #include "screencastcontext.h"
 #include "portalcommon.h"
 #include "fpslimit.h"
+#include "toplevelmodel.h"
 
 #include <gbm.h>
 #include <xf86drm.h>
@@ -53,6 +54,10 @@ public:
                    QObject *parent = nullptr);
     PipeWireStream(QPointer<ScreenCastContext> context,
                    const QRect &region,
+                   PortalCommon::CursorModes mode,
+                   QObject *parent = nullptr);
+    PipeWireStream(QPointer<ScreenCastContext> context,
+                   ToplevelInfo *toplevel,
                    PortalCommon::CursorModes mode,
                    QObject *parent = nullptr);
     ~PipeWireStream() override;

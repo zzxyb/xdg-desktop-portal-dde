@@ -8,6 +8,7 @@
 #include "portalcommon.h"
 #include "treelandintegration.h"
 #include "dbushelpers.h"
+#include "toplevelmodel.h"
 
 #include <QObject>
 #include <QDBusObjectPath>
@@ -55,7 +56,8 @@ public Q_SLOTS:
                QVariantMap &replyResults);
 private:
     static std::pair<PortalResponse::Response, QVariantMap> continueStartAfterDialog(ScreenCastSession *session,
-                                                                              const QList<QPointer<QScreen>> &selectedOutputs,
-                                                                              const QRect &selectedRegion,
-                                                                              bool allowRestore);
+                                                                                     const QList<QPointer<QScreen>> &selectedOutputs,
+                                                                                     const QRect &selectedRegion,
+                                                                                     const QList<ToplevelInfo *> selectedToplevel,
+                                                                                     bool allowRestore);
 };

@@ -172,7 +172,7 @@ protected:
     uint32_t m_framerate = 0;
 
     bool m_initialized = false;
-    bool m_avoidDMAbufs = false;
+    bool m_avoidDMAbufs = true;
     int m_err = 0;
     bool m_quit = false;
     bool m_isStreaming = false;

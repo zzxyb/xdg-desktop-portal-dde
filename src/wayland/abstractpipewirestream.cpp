@@ -308,7 +308,41 @@ void AbstractPipeWireStream::onStreamParamChanged(uint32_t id, const spa_pod *pa
     m_framerate = (uint32_t)(m_pipewireVideoInfo.max_framerate.num / m_pipewireVideoInfo.max_framerate.denom);
     struct gbm_device *gbm = m_currentConstraints.gbm;
     const struct spa_pod_prop *prop_modifier = spa_pod_find_prop(param, nullptr, SPA_FORMAT_VIDEO_modifier);
-    if (prop_modifier) {
+    const spa_pod_prop *prop =
+            spa_pod_find_prop(param, nullptr, SPA_PARAM_BUFFERS_dataType);
+    if (!prop) {
+        qCWarning(SCREENCAST)
+        << "No SPA_PARAM_BUFFERS_dataType, assuming no dmabuf support";
+        m_avoidDMAbufs = true;
+        return;
+    }
+
+    uint32_t nVals = 0;
+    uint32_t choice = 0;
+    spa_pod *vals = spa_pod_get_values(&prop->value, &nVals, &choice);
+    if (!vals || nVals == 0) {
+        qCWarning(SCREENCAST)
+        << "Invalid SPA_PARAM_BUFFERS_dataType values, assuming no dmabuf support";
+        m_avoidDMAbufs = true;
+        return;
+    }
+
+    int32_t dataType = 0;
+    if (spa_pod_get_int(&vals[0], &dataType) < 0) {
+        qCWarning(SCREENCAST)
+        << "Failed to read SPA_PARAM_BUFFERS_dataType, assuming no dmabuf support";
+        m_avoidDMAbufs = true;
+        return;
+    }
+
+    const bool hasDmaBuf = dataType & (1u << SPA_DATA_DmaBuf);
+    if (!hasDmaBuf) {
+        qCDebug(SCREENCAST)
+        << "Client does not advertise dmabuf support, disabling dmabuf path";
+        m_avoidDMAbufs = true;
+    }
+
+    if (prop_modifier && hasDmaBuf) {
         m_bufferType = PortalCommon::DMABUF;
         data_type = 1<<SPA_DATA_DmaBuf;
         uint32_t fourcc = PipeWireutils::drmFourccFromPipewireFormat(m_pipewireVideoInfo.format);

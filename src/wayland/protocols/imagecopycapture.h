@@ -72,6 +72,8 @@ class ImageCopyCaptureCursorSession
     Q_OBJECT
 public:
     ImageCopyCaptureCursorSession(struct ::ext_image_copy_capture_cursor_session_v1 *object, QObject *parent = nullptr);
+    struct ::ext_image_copy_capture_session_v1 *captureSession() const;
+    void destroySession();
 
 Q_SIGNALS:
     void enter();

@@ -16,6 +16,9 @@ find_package(Libdrm REQUIRED)
 find_package(Wayland REQUIRED COMPONENTS Client)
 pkg_check_modules(GBM IMPORTED_TARGET gbm REQUIRED)
 pkg_check_modules(PIPEWIRE IMPORTED_TARGET libpipewire-0.3 REQUIRED)
+pkg_check_modules(EGL IMPORTED_TARGET egl REQUIRED)
+pkg_check_modules(GLES2 IMPORTED_TARGET glesv2 REQUIRED)
+pkg_check_modules(VULKAN IMPORTED_TARGET vulkan REQUIRED)
 
 add_library(xdg-desktop-portal-dde-wayland SHARED
     loggings.h
@@ -75,6 +78,12 @@ add_library(xdg-desktop-portal-dde-wayland SHARED
     amhelper.cpp
     abstractpipewirestream.h
     abstractpipewirestream.cpp
+    screencastpreview.h
+    screencastpreview.cpp
+    screencastpreviewitem.h
+    screencastpreviewitem.cpp
+    screencastpreviewpainteditem.h
+    screencastpreviewpainteditem.cpp
     outputpipewirestream.h
     outputpipewirestream.cpp
     toplevelpipewirestream.h
@@ -127,9 +136,40 @@ qt_add_qml_module(xdg-desktop-portal-dde-wayland
     VERSION 1.0
     QML_FILES
         ScreencastChooserWindow.qml
+        ScreenCastPreviewView.qml
         OutputListView.qml
         ToplevelList.qml
         Background.qml
+)
+
+find_program(QSB_EXECUTABLE NAMES qsb PATHS /usr/lib/qt6/bin REQUIRED)
+
+set(SCREENCAST_PREVIEW_VERT_QSB ${CMAKE_CURRENT_BINARY_DIR}/preview.vert.qsb)
+set(SCREENCAST_PREVIEW_FRAG_QSB ${CMAKE_CURRENT_BINARY_DIR}/preview.frag.qsb)
+
+add_custom_command(
+    OUTPUT ${SCREENCAST_PREVIEW_VERT_QSB}
+    COMMAND ${QSB_EXECUTABLE} --qt6 ${CMAKE_CURRENT_SOURCE_DIR}/shaders/preview.vert -o ${SCREENCAST_PREVIEW_VERT_QSB}
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/shaders/preview.vert
+    COMMENT "Compiling preview vertex shader"
+)
+
+add_custom_command(
+    OUTPUT ${SCREENCAST_PREVIEW_FRAG_QSB}
+    COMMAND ${QSB_EXECUTABLE} --qt6 ${CMAKE_CURRENT_SOURCE_DIR}/shaders/preview.frag -o ${SCREENCAST_PREVIEW_FRAG_QSB}
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/shaders/preview.frag
+    COMMENT "Compiling preview fragment shader"
+)
+
+set_source_files_properties(${SCREENCAST_PREVIEW_VERT_QSB} PROPERTIES QT_RESOURCE_ALIAS "preview.vert.qsb")
+set_source_files_properties(${SCREENCAST_PREVIEW_FRAG_QSB} PROPERTIES QT_RESOURCE_ALIAS "preview.frag.qsb")
+
+qt_add_resources(xdg-desktop-portal-dde-wayland "screencast_preview_shaders"
+    PREFIX
+        "/screencast/shaders"
+    FILES
+        ${SCREENCAST_PREVIEW_VERT_QSB}
+        ${SCREENCAST_PREVIEW_FRAG_QSB}
 )
 
 target_link_libraries(xdg-desktop-portal-dde-wayland
@@ -147,6 +187,9 @@ PUBLIC
     Libdrm::Libdrm
     PkgConfig::GBM
     PkgConfig::PIPEWIRE
+    PkgConfig::EGL
+    PkgConfig::GLES2
+    PkgConfig::VULKAN
     Wayland::Client
 )
 

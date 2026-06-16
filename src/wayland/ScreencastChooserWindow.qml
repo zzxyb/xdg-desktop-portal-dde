@@ -29,7 +29,7 @@ D.DialogWindow {
     property var toplevelsModel: toplevelsView.model
     property string clientAppName
     readonly property real itemMargin: 10
-    readonly property real scrollBarMargin: 50
+    readonly property bool isScreenView: viewLayout.currentIndex === 0
 
     signal accept()
     signal reject()
@@ -66,46 +66,47 @@ D.DialogWindow {
             }
         }
 
-        StackLayout {
-            id: viewLayout
-
-            readonly property real viewMargin: 62
-            readonly property real viewHeight: 372
-            readonly property real radius: 6
-            readonly property real delegateHeight: 36
-            readonly property color darkColor: "black"
-            readonly property color lightColor: "white"
-
+        ColumnLayout {
+            spacing: root.itemMargin
             Layout.preferredWidth: parent.width
-            Layout.preferredHeight: viewHeight
-            currentIndex: 0
-            Background {
-                radius: parent.radius
-                darkColor: parent.darkColor
-                lightColor: parent.lightColor
-                OutputListView {
-                    id: screensView
+            Layout.preferredHeight: 372
 
-                    anchors.fill: parent
-                    rightMargin: root.scrollBarMargin
-                    model: ScreenListModel {}
-                    itemHeight: viewLayout.delegateHeight
-                    currentIndex: -1
+            StackLayout {
+                id: viewLayout
+
+                readonly property real radius: 6
+                readonly property color darkColor: "black"
+                readonly property color lightColor: "white"
+
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                currentIndex: 0
+                Background {
+                    radius: parent.radius
+                    darkColor: parent.darkColor
+                    lightColor: parent.lightColor
+                    OutputListView {
+                        id: screensView
+
+                        anchors.fill: parent
+                        model: ScreenListModel {}
+                        currentIndex: -1
+                        previewActive: root.isScreenView
+                    }
                 }
-            }
 
-            Background {
-                radius: parent.radius
-                darkColor: parent.darkColor
-                lightColor: parent.lightColor
-                ToplevelList {
-                    id: toplevelsView
+                Background {
+                    radius: parent.radius
+                    darkColor: parent.darkColor
+                    lightColor: parent.lightColor
+                    ToplevelList {
+                        id: toplevelsView
 
-                    anchors.fill: parent
-                    rightMargin: root.scrollBarMargin
-                    model: ToplevelListModel {}
-                    itemHeight: viewLayout.delegateHeight
-                    currentIndex: -1
+                        anchors.fill: parent
+                        model: ToplevelListModel {}
+                        currentIndex: -1
+                        previewActive: !root.isScreenView
+                    }
                 }
             }
         }

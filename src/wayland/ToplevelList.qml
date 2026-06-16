@@ -8,51 +8,75 @@ import QtQuick.Layouts
 
 import org.deepin.dtk 1.0 as D
 
-ListView {
+GridView {
     id: view
 
-    property real itemHeight
+    property real cardWidth: 236
+    property real cardHeight: 180
+    property bool previewActive: true
     readonly property real iconSize: 16
 
     clip: true
-    highlightFollowsCurrentItem: true
-    ButtonGroup { id: doubleExclusiveGroup }
-    delegate: D.CheckDelegate {
-        width: view.width
-        height: view.itemHeight
-        ButtonGroup.group: doubleExclusiveGroup
-        content: RowLayout {
-            spacing: 10
-            D.DciIcon {
-                width: view.iconSize
-                height: view.iconSize
-                name: appIcon
-                sourceSize: Qt.size(width, height)
-            }
-            Label {
-                text: name
-            }
-            Label {
-                text: title
-                opacity: 0.7
-                elide: Text.ElideRight
-                Layout.fillWidth: true
-            }
-        }
-        onClicked: view.currentIndex = index
+    cellWidth: Math.max(cardWidth, width / Math.max(1, Math.floor(width / cardWidth)))
+    cellHeight: cardHeight
+    boundsBehavior: Flickable.StopAtBounds
 
-        Background {
-            readonly property real sideMargin: 10
+    delegate: Item {
+        width: view.cellWidth
+        height: view.cellHeight
 
-            anchors {
-                bottom: parent.bottom
-                left: parent.left
-                right: parent.right
-                leftMargin: sideMargin
-                rightMargin: sideMargin
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 6
+            radius: 8
+            color: "transparent"
+            border.width: GridView.isCurrentItem ? 2 : 1
+            border.color: GridView.isCurrentItem ? palette.highlight : palette.mid
+
+            ScreenCastPreviewView {
+                anchors {
+                    top: parent.top
+                    left: parent.left
+                    right: parent.right
+                    margins: 6
+                }
+                height: parent.height - windowInfo.height - 20
+                active: view.previewActive
+                sourceType: PortalCommon.Window
+                toplevelsModel: view.model
+                toplevelIndex: index
+                showCursor: true
             }
-            width: parent.width
-            height: 1
+
+            RowLayout {
+                id: windowInfo
+
+                anchors {
+                    bottom: parent.bottom
+                    left: parent.left
+                    right: parent.right
+                    margins: 6
+                }
+                spacing: 6
+
+                D.DciIcon {
+                    Layout.preferredWidth: view.iconSize
+                    Layout.preferredHeight: view.iconSize
+                    name: appIcon
+                    sourceSize: Qt.size(width, height)
+                }
+                Label {
+                    text: title.length > 0 ? title : name
+                    opacity: 0.85
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                onClicked: view.currentIndex = index
+            }
         }
     }
 

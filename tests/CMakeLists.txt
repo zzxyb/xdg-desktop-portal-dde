@@ -20,3 +20,20 @@ add_test(NAME settings-dbus-metatype COMMAND test-settings-dbus-metatype)
 set_tests_properties(settings-dbus-metatype PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
+
+add_executable(test-screencast-options
+    test_screencast_options.cpp
+)
+
+target_include_directories(test-screencast-options PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/wayland
+)
+
+target_link_libraries(test-screencast-options PRIVATE
+    xdg-desktop-portal-dde-wayland
+)
+
+add_test(NAME screencast-options COMMAND test-screencast-options)
+set_tests_properties(screencast-options PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)

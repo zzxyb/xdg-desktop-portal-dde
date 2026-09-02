@@ -126,15 +126,22 @@ Stream TreelandIntergration::startStreaming(AbstractPipeWireStream *stream, cons
     qCWarning(SCREENCAST) << "startStreaming";
     QEventLoop loop;
     Stream ret;
+    const auto setStream = [&ret, stream, &streamOptions](uint32_t nodeId) {
+        ret.stream = stream;
+        ret.nodeId = nodeId;
+        ret.map = streamOptions;
+        const uint64_t serial = stream->nodeSerial();
+        if (serial != 0) {
+            ret.map.insert(QStringLiteral("pipewire-serial"), QVariant::fromValue<qulonglong>(serial));
+        }
+    };
 
     connect(stream, &AbstractPipeWireStream::failed, &loop, [&](const QString &error) {
         qCWarning(SCREENCAST) << "failed to start streaming" << stream << error;
         loop.quit();
     });
     if (stream->nodeId() != SPA_ID_INVALID) {
-        ret.stream = stream;
-        ret.nodeId = stream->nodeId();
-        ret.map = streamOptions;
+        setStream(stream->nodeId());
         m_streams.append(ret);
         loop.quit();
         connect(stream, &AbstractPipeWireStream::closed, this, [this](uint32_t nodeid) {
@@ -144,9 +151,7 @@ Stream TreelandIntergration::startStreaming(AbstractPipeWireStream *stream, cons
         loop.quit();
     } else {
         connect(stream, &AbstractPipeWireStream::ready, &loop, [&](uint32_t nodeid) {
-            ret.stream = stream;
-            ret.nodeId = nodeid;
-            ret.map = streamOptions;
+            setStream(nodeid);
             m_streams.append(ret);
 
             connect(stream, &AbstractPipeWireStream::closed, this, [this, nodeid] {

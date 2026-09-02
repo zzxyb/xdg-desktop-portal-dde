@@ -10,6 +10,7 @@
 
 #include <pipewire/pipewire.h>
 #include <pipewire/stream.h>
+#include <pipewire/keys.h>
 #include <spa/buffer/meta.h>
 #include <spa/utils/result.h>
 #include <spa/param/props.h>
@@ -259,6 +260,27 @@ AbstractPipeWireStream::~AbstractPipeWireStream()
     destroyStream();
     pipewireBufferConstraintsFinish(&m_currentConstraints);
     pipewireBufferConstraintsFinish(&m_pendingConstraints);
+}
+
+uint64_t AbstractPipeWireStream::nodeSerial() const
+{
+    if (!m_stream) {
+        return 0;
+    }
+
+    const pw_properties *properties = pw_stream_get_properties(m_stream);
+    const char *serial = properties ? pw_properties_get(properties, PW_KEY_OBJECT_SERIAL) : nullptr;
+    if (serial) {
+        bool ok = false;
+        const uint64_t value = QByteArray(serial).toULongLong(&ok);
+        if (ok) {
+            return value;
+        }
+    }
+
+    return m_context && m_context->m_pwCore
+            ? m_context->m_pwCore->objectSerial(m_nodeId)
+            : 0;
 }
 
 void AbstractPipeWireStream::onStreamStateChanged(pw_stream_state old, pw_stream_state state, const char *error)

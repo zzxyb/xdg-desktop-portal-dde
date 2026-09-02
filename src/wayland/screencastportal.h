@@ -33,7 +33,7 @@ public:
     ScreencastPortalWayland(PortalWaylandContext *context);
     ~ScreencastPortalWayland() override;
 
-    uint version() const { return 6;}
+    uint version() const { return 6; }
     uint AvailableSourceTypes() const;
     uint AvailableCursorModes() const;
 

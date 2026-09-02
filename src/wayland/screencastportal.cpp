@@ -38,8 +38,7 @@ uint ScreencastPortalWayland::AvailableSourceTypes() const
 uint ScreencastPortalWayland::AvailableCursorModes() const
 {
     return PortalCommon::Hidden |
-            PortalCommon::Embedded |
-            PortalCommon::Metadata;
+            PortalCommon::Embedded;
 }
 
 uint ScreencastPortalWayland::CreateSession(const QDBusObjectPath &handle,
@@ -53,6 +52,11 @@ uint ScreencastPortalWayland::CreateSession(const QDBusObjectPath &handle,
     qCDebug(SCREENCAST) << "    session_handle: " << session_handle.path();
     qCDebug(SCREENCAST) << "    app_id: " << app_id;
     qCDebug(SCREENCAST) << "    options: " << options;
+
+    if (!globalIntergration->isStreamingAvailable()) {
+        qCWarning(SCREENCAST) << "Screen casting protocols are not available";
+        return PortalResponse::OtherError;
+    }
 
     Session *session = Session::createSession(this, Session::ScreenCast, app_id, session_handle.path());
 
@@ -75,11 +79,6 @@ uint ScreencastPortalWayland::CreateSession(const QDBusObjectPath &handle,
     m_sessionActions.insert(qobject_cast<ScreenCastSession *>(session), action);
     m_tray->show();
 
-    if (!globalIntergration->isStreamingAvailable()) {
-        qCWarning(SCREENCAST) << "wlf-screencopy-unstable-v1 does not seem to be available";
-        return PortalResponse::OtherError;
-    }
-
     connect(session, &Session::closed, [session, this] {
         auto screencastSession = qobject_cast<ScreenCastSession *>(session);
         QAction *action = m_sessionActions.value(screencastSession);
@@ -96,6 +95,7 @@ uint ScreencastPortalWayland::CreateSession(const QDBusObjectPath &handle,
         }
     });
 
+    results.insert(QStringLiteral("session_id"), session_handle.path());
     return PortalResponse::Success;
 }
 
@@ -120,14 +120,27 @@ uint ScreencastPortalWayland::SelectSources(const QDBusObjectPath &handle,
         return PortalResponse::OtherError;
     }
 
-    session->setOptions(options);
+    if (!session->setOptions(options,
+                             PortalCommon::SourceTypes(PortalCommon::SourceType(AvailableSourceTypes())),
+                             AvailableCursorModes())) {
+        qCWarning(SCREENCAST) << "Invalid source types or cursor mode";
+        session->close();
+        return PortalResponse::OtherError;
+    }
     if (session->type() == Session::RemoteDesktop) {
         RemoteDesktopSession *remoteDesktopSession = qobject_cast<RemoteDesktopSession *>(session);
         if (remoteDesktopSession) {
             remoteDesktopSession->setScreenSharingEnabled(true);
         }
     } else {
-        session->setPersistMode(PortalCommon::PersistMode(options.value(QStringLiteral("persist_mode")).toUInt()));
+        const uint persistMode = options.value(QStringLiteral("persist_mode"),
+                                               uint(PortalCommon::NoPersist)).toUInt();
+        if (persistMode > uint(PortalCommon::PersistUntilRevoked)) {
+            qCWarning(SCREENCAST) << "Invalid persist mode" << persistMode;
+            session->close();
+            return PortalResponse::OtherError;
+        }
+        session->setPersistMode(PortalCommon::PersistMode(persistMode));
         session->setRestoreData(options.value(QStringLiteral("restore_data")));
     }
 
@@ -177,8 +190,11 @@ std::pair<PortalResponse::Response, QVariantMap> ScreencastPortalWayland::contin
     session->setStreams(streams);
     QVariantMap results;
     results.insert(QStringLiteral("streams"), QVariant::fromValue<Streams>(streams));
+    const auto effectivePersistMode = allowRestore
+            ? session->persistMode()
+            : PortalCommon::NoPersist;
+    results.insert(QStringLiteral("persist_mode"), quint32(effectivePersistMode));
     if (allowRestore) {
-        results.insert(QStringLiteral("persist_mode"), quint32(session->persistMode()));
         if (session->persistMode() != PortalCommon::NoPersist) {
             QVariantList outputNames;
             for (const QPointer<QScreen> &screen : selectedOutputs) {

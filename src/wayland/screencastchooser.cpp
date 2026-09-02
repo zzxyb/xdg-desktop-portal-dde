@@ -32,6 +32,10 @@ ScreenCastChooser::ScreenCastChooser( const QString &appID, PortalCommon::Source
         connect(win, SIGNAL(reject()), this, SLOT(reject()));
         m_window = win;
         m_window->setProperty("clientAppName", QVariant::fromValue(AMHelpers::nameFromAM(appID)));
+        m_window->setProperty("allowedSourceTypes", uint(types));
+        if (!types.testFlag(PortalCommon::Monitor) && types.testFlag(PortalCommon::Window)) {
+            m_window->setProperty("viewLayoutIndex", 1);
+        }
     }
 }
 

@@ -28,6 +28,7 @@ D.DialogWindow {
     property var outputsModel: screensView.model
     property var toplevelsModel: toplevelsView.model
     property string clientAppName
+    property int allowedSourceTypes: 1
     readonly property real itemMargin: 10
     readonly property real scrollBarMargin: 50
 
@@ -54,12 +55,14 @@ D.DialogWindow {
             Layout.alignment: Qt.AlignHCenter
             Button {
                 text: qsTr("Screen")
+                visible: (root.allowedSourceTypes & 1) !== 0
                 highlighted: viewLayout.currentIndex === 0
                 flat: !highlighted
                 onClicked: viewLayout.currentIndex = 0
             }
             Button {
                 text: qsTr("Window")
+                visible: (root.allowedSourceTypes & 2) !== 0
                 highlighted: viewLayout.currentIndex === 1
                 flat: !highlighted
                 onClicked: viewLayout.currentIndex = 1

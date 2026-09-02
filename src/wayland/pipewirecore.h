@@ -5,6 +5,7 @@
 #pragma once
 
 #include <QObject>
+#include <QHash>
 
 #include <pipewire/pipewire.h>
 #include <spa/utils/hook.h>
@@ -23,12 +24,17 @@ public:
 
     bool init();
     bool isValid() const;
+    uint64_t objectSerial(uint32_t objectId) const;
 
     static void onCoreError(void *data,
                             uint32_t id,
                             int seq,
                             int res,
                             const char *message);
+    static void onRegistryGlobal(void *data, uint32_t id, uint32_t permissions,
+                                 const char *type, uint32_t version,
+                                 const struct spa_dict *properties);
+    static void onRegistryGlobalRemove(void *data, uint32_t id);
 
 Q_SIGNALS:
     void pipewireFailed(const QString &message);
@@ -42,6 +48,9 @@ private:
     struct pw_context *m_pwContext = nullptr;
     struct pw_loop *m_pwMainLoop = nullptr;
     spa_hook m_coreListener;
+    struct pw_registry *m_registry = nullptr;
+    spa_hook m_registryListener;
+    QHash<uint32_t, uint64_t> m_objectSerials;
     QString m_error;
     QSocketNotifier *m_notifier = nullptr;
 

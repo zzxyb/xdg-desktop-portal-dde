@@ -7,6 +7,13 @@
 
 #include <QLoggingCategory>
 #include <QSocketNotifier>
+#include <pipewire/keys.h>
+
+static const pw_registry_events registryEvents = {
+    .version = PW_VERSION_REGISTRY_EVENTS,
+    .global = PipeWireCore::onRegistryGlobal,
+    .global_remove = PipeWireCore::onRegistryGlobalRemove,
+};
 
 PipeWireCore::PipeWireCore(QObject *parent)
     : QObject(parent)
@@ -21,6 +28,10 @@ PipeWireCore::~PipeWireCore()
 {
     if (m_pwMainLoop) {
         pw_loop_leave(m_pwMainLoop);
+    }
+
+    if (m_registry) {
+        pw_proxy_destroy(reinterpret_cast<pw_proxy *>(m_registry));
     }
 
     if (m_pwCore) {
@@ -77,8 +88,41 @@ bool PipeWireCore::init()
     }
 
     pw_core_add_listener(m_pwCore, &m_coreListener, &m_pwCoreEvents, this);
+    m_registry = pw_core_get_registry(m_pwCore, PW_VERSION_REGISTRY, 0);
+    if (m_registry) {
+        pw_registry_add_listener(m_registry, &m_registryListener, &registryEvents, this);
+    }
     m_valid = true;
     return true;
+}
+
+uint64_t PipeWireCore::objectSerial(uint32_t objectId) const
+{
+    return m_objectSerials.value(objectId, 0);
+}
+
+void PipeWireCore::onRegistryGlobal(void *data, uint32_t id, uint32_t permissions,
+                                    const char *type, uint32_t version,
+                                    const spa_dict *properties)
+{
+    Q_UNUSED(permissions)
+    Q_UNUSED(type)
+    Q_UNUSED(version)
+    PipeWireCore *core = static_cast<PipeWireCore *>(data);
+    const char *serial = properties ? spa_dict_lookup(properties, PW_KEY_OBJECT_SERIAL) : nullptr;
+    if (!serial) {
+        return;
+    }
+    bool ok = false;
+    const uint64_t value = QByteArray(serial).toULongLong(&ok);
+    if (ok) {
+        core->m_objectSerials.insert(id, value);
+    }
+}
+
+void PipeWireCore::onRegistryGlobalRemove(void *data, uint32_t id)
+{
+    static_cast<PipeWireCore *>(data)->m_objectSerials.remove(id);
 }
 
 void PipeWireCore::onCoreError(void *data,

@@ -98,6 +98,7 @@ public:
                        struct wl_array *params);
 
     uint32_t nodeId() const { return m_nodeId; }
+    uint64_t nodeSerial() const;
 
     void pipewireBufferConstraintsInit(struct PipewireBufferConstraints *constraints);
     bool pipewireBufferConstraintsMove(struct PipewireBufferConstraints *dst, struct PipewireBufferConstraints *src);

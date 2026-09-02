@@ -21,7 +21,7 @@ bool ScreenCastSession::multipleSources() const
     return m_multipleSources;
 }
 
-PortalCommon::SourceType ScreenCastSession::types() const
+PortalCommon::SourceTypes ScreenCastSession::types() const
 {
     return m_types;
 }
@@ -43,13 +43,27 @@ PortalCommon::CursorModes ScreenCastSession::cursorMode() const
     return m_cursorMode;
 }
 
-void ScreenCastSession::setOptions(const QVariantMap &options)
+bool ScreenCastSession::setOptions(const QVariantMap &options,
+                                   PortalCommon::SourceTypes availableSourceTypes,
+                                   uint availableCursorModes)
 {
     m_multipleSources = options.value(QStringLiteral("multiple")).toBool();
-    m_cursorMode = PortalCommon::CursorModes(options.value(QStringLiteral("cursor_mode")).toUInt());
-    m_types = PortalCommon::SourceType(options.value(QStringLiteral("types")).toUInt());
+    const uint cursorMode = options.value(QStringLiteral("cursor_mode"),
+                                          uint(PortalCommon::Hidden)).toUInt();
+    const uint sourceTypes = options.value(QStringLiteral("types"),
+                                           uint(PortalCommon::Monitor)).toUInt();
 
-    if (m_types == 0) {
-        m_types = PortalCommon::Monitor;
+    if (cursorMode == 0 || (cursorMode & (cursorMode - 1)) != 0 ||
+        (cursorMode & availableCursorModes) == 0) {
+        return false;
     }
+
+    const uint availableTypes = uint(availableSourceTypes);
+    if (sourceTypes == 0 || (sourceTypes & ~availableTypes) != 0) {
+        return false;
+    }
+
+    m_cursorMode = PortalCommon::CursorModes(cursorMode);
+    m_types = PortalCommon::SourceTypes(PortalCommon::SourceType(sourceTypes));
+    return true;
 }

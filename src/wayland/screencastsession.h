@@ -18,11 +18,13 @@ public:
                                QObject *parent = nullptr);
     ~ScreenCastSession() override;
 
-    void setOptions(const QVariantMap &options);
+    bool setOptions(const QVariantMap &options,
+                    PortalCommon::SourceTypes availableSourceTypes,
+                    uint availableCursorModes);
 
     PortalCommon::CursorModes cursorMode() const;
     bool multipleSources() const;
-    PortalCommon::SourceType types() const;
+    PortalCommon::SourceTypes types() const;
 
     SessionType type() const override { return SessionType::ScreenCast; }
 
@@ -47,7 +49,7 @@ protected:
 private:
     bool m_multipleSources = false;
     PortalCommon::CursorModes m_cursorMode = PortalCommon::Hidden;
-    PortalCommon::SourceType m_types = PortalCommon::Any;
+    PortalCommon::SourceTypes m_types = PortalCommon::Monitor;
     PortalCommon::PersistMode m_persistMode = PortalCommon::NoPersist;
     QVariant m_restoreData;
 

@@ -10,6 +10,8 @@
 
 #include <QSettings>
 #include <QStandardPaths>
+#include <QQuickGraphicsConfiguration>
+#include <vulkan/vulkan.h>
 
 constexpr auto URI = "screencast";
 
@@ -27,6 +29,18 @@ ScreenCastChooser::ScreenCastChooser( const QString &appID, PortalCommon::Source
     QQuickWindow* win = qobject_cast<QQuickWindow *>(rootObject);
 
     if (win) {
+        QQuickGraphicsConfiguration graphicsConfiguration = win->graphicsConfiguration();
+        graphicsConfiguration.setDeviceExtensions({
+            QByteArrayLiteral(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME),
+            QByteArrayLiteral(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME),
+            QByteArrayLiteral(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME),
+            QByteArrayLiteral(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME),
+            QByteArrayLiteral(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME),
+            QByteArrayLiteral(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME),
+            QByteArrayLiteral(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME),
+            QByteArrayLiteral(VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME)
+        });
+        win->setGraphicsConfiguration(graphicsConfiguration);
         connect(win, &QQuickWindow::closing, this, &ScreenCastChooser::handleWindowClosed);
         connect(win, SIGNAL(accept()), this, SLOT(accept()));
         connect(win, SIGNAL(reject()), this, SLOT(reject()));

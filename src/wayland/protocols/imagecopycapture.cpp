@@ -89,6 +89,16 @@ ImageCopyCaptureCursorSession::ImageCopyCaptureCursorSession(struct ::ext_image_
 {
 }
 
+struct ::ext_image_copy_capture_session_v1 *ImageCopyCaptureCursorSession::captureSession() const
+{
+    return const_cast<ImageCopyCaptureCursorSession *>(this)->get_capture_session();
+}
+
+void ImageCopyCaptureCursorSession::destroySession()
+{
+    destroy();
+}
+
 void ImageCopyCaptureCursorSession::ext_image_copy_capture_cursor_session_v1_enter()
 {
     Q_EMIT enter();

@@ -60,6 +60,7 @@ private:
     friend class AbstractPipeWireStream;
     friend class OutputPipeWireStream;
     friend class ToplevelPipeWireStream;
+    friend class ScreenCastPreview;
 
     PipeWireCore *m_pwCore;
     WLShm *m_shm;
